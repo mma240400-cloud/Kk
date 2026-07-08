@@ -27,9 +27,10 @@ export interface Guest {
   stayTo: string;
   isCurrent: boolean; // ဒီမှာနေတာလားမနေဘူးလား (Currently staying or departed)
   familyMembers: FamilyMember[];
+  phone?: string;
   remarks?: string;
   createdAt: string;
 }
 
 export type FilterStatus = 'all' | 'current' | 'departed';
-export type SortOption = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc';
+export type SortOption = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc' | 'stayDate';

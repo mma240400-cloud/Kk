@@ -25,6 +25,7 @@ export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm
   const [dob, setDob] = useState('');
   const [age, setAge] = useState<number | ''>('');
   const [nrc, setNrc] = useState('');
+  const [phone, setPhone] = useState('');
   const [parents, setParents] = useState('');
   const [ethnicityReligion, setEthnicityReligion] = useState('');
   const [origin, setOrigin] = useState('');
@@ -34,6 +35,7 @@ export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm
   const [isCurrent, setIsCurrent] = useState(true);
   const [remarks, setRemarks] = useState('');
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const [validationErrors, setValidationErrors] = useState<{ nrc?: string; phone?: string }>({});
 
   // Sub-form state for adding a family member
   const [showFamilyModal, setShowFamilyModal] = useState(false);
@@ -68,6 +70,7 @@ export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm
       setDob(initialGuest.dob);
       setAge(initialGuest.age);
       setNrc(initialGuest.nrc);
+      setPhone(initialGuest.phone || '');
       setParents(initialGuest.parents);
       setEthnicityReligion(initialGuest.ethnicityReligion);
       setOrigin(initialGuest.origin);
@@ -138,10 +141,23 @@ export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm
       alert('အသက် ထည့်သွင်းပေးပါရန်');
       return;
     }
+
+    const errors: { nrc?: string; phone?: string } = {};
     if (!nrc.trim()) {
-      alert('မှတ်ပုံတင်အမှတ် ထည့်သွင်းပေးပါရန်');
+      errors.nrc = 'မှတ်ပုံတင်အမှတ် ထည့်သွင်းပေးရန် လိုအပ်ပါသည်';
+    }
+    if (!phone.trim()) {
+      errors.phone = 'ဆက်သွယ်ရန်ဖုန်းနံပါတ် ထည့်သွင်းပေးရန် လိုအပ်ပါသည်';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      alert('မှတ်ပုံတင်အမှတ် နှင့် ဖုန်းနံပါတ်များကို ပြည့်စုံစွာ ဖြည့်စွက်ပေးပါရန်');
       return;
     }
+
+    setValidationErrors({});
+
     if (!origin.trim()) {
       alert('လာရောက်သည့်ဒေသ ထည့်သွင်းပေးပါရန်');
       return;
@@ -154,6 +170,7 @@ export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm
       dob,
       age: Number(age),
       nrc: nrc.trim(),
+      phone: phone.trim(),
       parents: parents.trim(),
       ethnicityReligion: ethnicityReligion.trim(),
       origin: origin.trim(),
@@ -286,10 +303,54 @@ export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm
                 type="text"
                 required
                 value={nrc}
-                onChange={(e) => setNrc(e.target.value)}
+                onChange={(e) => {
+                  setNrc(e.target.value);
+                  if (e.target.value.trim() && validationErrors.nrc) {
+                    setValidationErrors(prev => ({ ...prev, nrc: undefined }));
+                  }
+                }}
                 placeholder="၁၂/လမတ(နိုင်)၁၂၃၄၅၆"
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-800"
+                className={`w-full px-4 py-2.5 rounded-xl border focus:outline-none focus:ring-2 transition-all text-slate-800 ${
+                  validationErrors.nrc 
+                    ? 'border-rose-400 focus:ring-rose-500/20 focus:border-rose-500 bg-rose-50/10' 
+                    : 'border-slate-200 focus:ring-emerald-500/20 focus:border-emerald-500'
+                }`}
               />
+              {validationErrors.nrc && (
+                <span className="text-rose-500 text-xs font-semibold mt-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                  ⚠️ {validationErrors.nrc}
+                </span>
+              )}
+            </div>
+
+            {/* Phone */}
+            <div className="flex flex-col">
+              <label className="text-sm font-medium text-slate-700 mb-1.5" htmlFor="guest-phone">
+                ဆက်သွယ်ရန်ဖုန်းနံပါတ် <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="guest-phone"
+                type="text"
+                required
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (e.target.value.trim() && validationErrors.phone) {
+                    setValidationErrors(prev => ({ ...prev, phone: undefined }));
+                  }
+                }}
+                placeholder="ဥပမာ - ၀၉၁၂၃၄၅၆၇၈၉"
+                className={`w-full px-4 py-2.5 rounded-xl border focus:outline-none focus:ring-2 transition-all text-slate-800 ${
+                  validationErrors.phone 
+                    ? 'border-rose-400 focus:ring-rose-500/20 focus:border-rose-500 bg-rose-50/10' 
+                    : 'border-slate-200 focus:ring-emerald-500/20 focus:border-emerald-500'
+                }`}
+              />
+              {validationErrors.phone && (
+                <span className="text-rose-500 text-xs font-semibold mt-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                  ⚠️ {validationErrors.phone}
+                </span>
+              )}
             </div>
 
             {/* Parents Name */}
@@ -522,6 +583,7 @@ export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm
               setDob('');
               setAge('');
               setNrc('');
+              setPhone('');
               setParents('');
               setEthnicityReligion('');
               setOrigin('');
@@ -534,6 +596,7 @@ export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm
               setIsCurrent(true);
               setRemarks('');
               setFamilyMembers([]);
+              setValidationErrors({});
             }}
             className="flex-1 py-3 text-slate-500 hover:text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl font-semibold text-sm transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer"
             id="btn-reset"

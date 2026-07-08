@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search,
   Plus,
@@ -30,13 +30,16 @@ import {
   Unlock,
   Printer,
   Eye,
-  EyeOff
+  EyeOff,
+  FileText,
+  Camera
 } from 'lucide-react';
 import { Guest, FilterStatus, SortOption } from './types';
 import { INITIAL_GUESTS } from './data/mockData';
 import GuestCard from './components/GuestCard';
 import GuestDetail from './components/GuestDetail';
 import GuestForm from './components/GuestForm';
+import QRScanner from './components/QRScanner';
 import QRCode from 'qrcode';
 
 const LOCAL_STORAGE_KEY = 'myanmar_guest_registry_data';
@@ -221,6 +224,17 @@ export default function App() {
     return { total, current, departed, totalFamily };
   }, [guests]);
 
+  const hasOverdueCurrentGuests = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return guests.some(g => {
+      if (!g.isCurrent || !g.stayTo) return false;
+      const stayToDate = new Date(g.stayTo);
+      stayToDate.setHours(0, 0, 0, 0);
+      return stayToDate < today;
+    });
+  }, [guests]);
+
   const isDateFilterActive = !!(filterStartDate || filterEndDate);
 
   const dateFilteredGuestsCount = useMemo(() => {
@@ -235,6 +249,9 @@ export default function App() {
       return true;
     }).length;
   }, [guests, filterStartDate, filterEndDate, isDateFilterActive]);
+
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
 
   // Load guests on start
   useEffect(() => {
@@ -258,12 +275,87 @@ export default function App() {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_GUESTS));
       localStorage.setItem('guest_registry_initialized', 'true');
     }
+    setIsInitialized(true);
   }, []);
 
   // Save guests to localStorage whenever they change
   const saveGuestsToStorage = (newGuests: Guest[]) => {
     setGuests(newGuests);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newGuests));
+  };
+
+  // Automatically save guests and maintain a safety backup cache
+  useEffect(() => {
+    if (!isInitialized) return;
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(guests));
+    
+    // Keep a cache copy as a safety net (only if we have elements to avoid accidental loss)
+    if (guests.length > 0) {
+      localStorage.setItem('guest_registry_backup_cache', JSON.stringify(guests));
+    }
+  }, [guests, isInitialized]);
+
+  const handleRestoreFromCache = () => {
+    const cached = localStorage.getItem('guest_registry_backup_cache');
+    if (!cached) {
+      showToast('ပြန်လည်ရယူရန် ဘရောက်ဆာ ကက်ရှ်ဒေတာ ရှာမတွေ့ပါ');
+      return;
+    }
+    try {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        setGuests(parsed);
+        showToast('ဘရောက်ဆာ ကက်ရှ်မှ ဒေတာများကို အောင်မြင်စွာ ပြန်လည်ရယူပြီးပါပြီ');
+      } else {
+        showToast('ကက်ရှ်ဒေတာ ပုံစံမမှန်ကန်ပါ');
+      }
+    } catch (e) {
+      console.error('Restore error', e);
+      showToast('ကက်ရှ်ဒေတာ ဖတ်၍မရပါ');
+    }
+  };
+
+  const handleQRScanSuccess = (data: string) => {
+    setShowQRScanner(false);
+    let rawData = data.trim();
+    
+    // Check if scanned URL has #import=
+    if (rawData.includes('#import=')) {
+      const parts = rawData.split('#import=');
+      rawData = parts[1];
+    }
+    
+    try {
+      let decodedStr = '';
+      if (rawData.startsWith('[') || rawData.startsWith('{')) {
+        decodedStr = rawData;
+      } else {
+        decodedStr = unicodeAtob(rawData);
+      }
+      
+      let parsed = JSON.parse(decodedStr);
+      if (!Array.isArray(parsed) && typeof parsed === 'object') {
+        parsed = [parsed];
+      }
+      
+      if (Array.isArray(parsed)) {
+        parsed = parsed.map((item: any) => {
+          if ('n' in item && !('name' in item)) {
+            return decompressGuest(item);
+          }
+          return item;
+        });
+        
+        if (parsed.length > 0) {
+          setIncomingGuests(parsed);
+          showToast(`QR Code မှ ဧည့်သည် ${parsed.length} ဦး၏ ဒေတာကို စစ်ဆေးနေပါသည်...`);
+        } else {
+          showToast('တင်သွင်းရန် ဒေတာ မတွေ့ရှိပါ');
+        }
+      }
+    } catch (e) {
+      console.error('QR parsing error:', e);
+      alert('QR Code ဖတ်၍မရပါ။ စနစ်မှ ထုတ်ပေးထားသော QR Code ဖြစ်ကြောင်း သေချာပါစေ။');
+    }
   };
 
   // Keep configuration states synced to localStorage
@@ -527,6 +619,11 @@ export default function App() {
         if (sortBy === 'oldest') {
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         }
+        if (sortBy === 'stayDate') {
+          const dateA = a.stayFrom ? new Date(a.stayFrom).getTime() : 0;
+          const dateB = b.stayFrom ? new Date(b.stayFrom).getTime() : 0;
+          return dateB - dateA;
+        }
         if (sortBy === 'nameAsc') {
           return a.name.localeCompare(b.name, 'my');
         }
@@ -625,6 +722,94 @@ export default function App() {
     showToast('အချက်အလက်အားလုံးကို Backup (.json) ဖိုင်ဖြင့် ထုတ်ယူပြီးပါပြီ');
   };
 
+  // Download Filtered Guest List as CSV
+  const handleDownloadCSV = () => {
+    if (filteredAndSortedGuests.length === 0) {
+      showToast('ဒေါင်းလုဒ်လုပ်ရန် ဧည့်သည်မရှိပါ');
+      return;
+    }
+
+    const escapeCSV = (value: string | number | undefined | null) => {
+      if (value === undefined || value === null) return '""';
+      const str = String(value);
+      const escaped = str.replace(/"/g, '""');
+      return `"${escaped}"`;
+    };
+
+    const headers = [
+      'စဉ်',
+      'အမည်',
+      'အသက်',
+      'မွေးသက္ကရာဇ်',
+      'မှတ်ပုံတင်အမှတ်',
+      'ဖုန်းနံပါတ်',
+      'မိဘအမည်',
+      'လူမျိုး/ကိုးကွယ်သည့်ဘာသာ',
+      'နေရပ်လိပ်စာ (မူလဒေသ)',
+      'လာရောက်ရသည့်အကြောင်းအရာ',
+      'စတင်တည်းခိုသည့်ရက်',
+      'ထွက်ခွာမည့်ရက်',
+      'လက်ရှိအခြေအနေ',
+      'အတူနေမိသားစုဝင်များ',
+      'မှတ်ချက်',
+      'စာရင်းသွင်းသည့်နေ့စွဲ'
+    ];
+
+    const rows = filteredAndSortedGuests.map((guest, index) => {
+      const statusStr = guest.isCurrent ? labelCurrent : labelDeparted;
+      
+      const familyStr = guest.familyMembers && guest.familyMembers.length > 0
+        ? guest.familyMembers.map(m => {
+            let memberInfo = `${m.name} (${m.relation}`;
+            if (m.age) memberInfo += ` - ${m.age} နှစ်`;
+            if (m.nrc) memberInfo += ` - ${m.nrc}`;
+            memberInfo += ')';
+            return memberInfo;
+          }).join(', ')
+        : 'မရှိပါ';
+
+      return [
+        escapeCSV(index + 1),
+        escapeCSV(guest.name),
+        escapeCSV(guest.age),
+        escapeCSV(guest.dob),
+        escapeCSV(guest.nrc),
+        escapeCSV(guest.phone || 'မရှိပါ'),
+        escapeCSV(guest.parents),
+        escapeCSV(guest.ethnicityReligion),
+        escapeCSV(guest.origin),
+        escapeCSV(guest.reason),
+        escapeCSV(guest.stayFrom),
+        escapeCSV(guest.stayTo),
+        escapeCSV(statusStr),
+        escapeCSV(familyStr),
+        escapeCSV(guest.remarks || ''),
+        escapeCSV(new Date(guest.createdAt).toLocaleDateString('my-MM', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }))
+      ];
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    // Excel compatibility BOM (Byte Order Mark) for Burmese/UTF-8
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `ဧည့်သည်စာရင်း_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('ဧည့်သည်စာရင်း CSV ဖိုင်ကို အောင်မြင်စွာ ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ');
+  };
+
   // Restore Database (Import JSON)
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -706,6 +891,25 @@ export default function App() {
 
             {/* Quick Action Buttons */}
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowQRScanner(true)}
+                className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold text-xs transition-transform active:scale-95 flex items-center gap-1.5 border border-indigo-100 shadow-2xs cursor-pointer"
+                title="ကင်မရာဖြင့် QR Scan ဖတ်ရန်"
+                id="scan-qr-header-btn"
+              >
+                <Camera size={14} className="text-indigo-600" />
+                <span>QR ဖတ်မည်</span>
+              </button>
+              {filteredAndSortedGuests.length > 0 && (
+                <button
+                  onClick={() => window.print()}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-xl font-bold text-xs transition-transform active:scale-95 flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                  title="လက်ရှိစာရင်းကို PDF အဖြစ် ထုတ်ယူရန်"
+                >
+                  <FileText size={14} className="text-slate-600" />
+                  <span>PDF ထုတ်မည်</span>
+                </button>
+              )}
               <button
                 onClick={() => setShowShareModal(true)}
                 className="p-2 bg-slate-50 hover:bg-slate-100 text-emerald-600 hover:text-emerald-800 rounded-xl transition-all border border-slate-100 cursor-pointer"
@@ -855,7 +1059,14 @@ export default function App() {
                 </div>
                 <div>
                   <div className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-wider">{labelCurrent}</div>
-                  <div className="text-lg font-bold text-emerald-800">{stats.current} ဦး</div>
+                  <div className="text-lg font-bold text-emerald-800 flex items-center gap-1.5 flex-wrap">
+                    <span>{stats.current} ဦး</span>
+                    {hasOverdueCurrentGuests && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-200 rounded-md animate-pulse cursor-help animate-duration-1000" title="သတ်မှတ်ထားသော တည်းခိုခွင့်သက်တမ်း ကျော်လွန်နေသည့် ဧည့်သည်များ ရှိနေပါသဖြင့် စစ်ဆေးပေးပါရန်">
+                        ⚠️ စစ်ရန်ရှိ
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -960,6 +1171,7 @@ export default function App() {
                   >
                     <option value="newest">နောက်ဆုံးသွင်းသူ (သစ်မှဟောင်း)</option>
                     <option value="oldest">ပထမဆုံးသွင်းသူ (ဟောင်းမှသစ်)</option>
+                    <option value="stayDate">တည်းခိုသည့်ရက် (သစ်မှဟောင်း)</option>
                     <option value="nameAsc">အမည် (က-မှ-အ)</option>
                     <option value="nameDesc">အမည် (အ-မှ-က)</option>
                   </select>
@@ -1083,6 +1295,16 @@ export default function App() {
               </p>
               
               <div className="flex items-center gap-2 flex-wrap">
+                {filteredAndSortedGuests.length > 0 && isAdminLoggedIn && (
+                  <button
+                    onClick={handleDownloadCSV}
+                    className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs hover:shadow-md active:scale-95 transition-all cursor-pointer"
+                    title="လက်ရှိ စစ်ထုတ်ထားသော ဧည့်သည်စာရင်းကို Excel / CSV ဖိုင်အဖြစ် ဒေါင်းလုဒ်လုပ်ရန်"
+                  >
+                    <Download size={14} />
+                    <span>Excel / CSV ဒေါင်းလုဒ်</span>
+                  </button>
+                )}
                 {filteredAndSortedGuests.length > 0 && (
                   <button
                     onClick={() => window.print()}
@@ -1297,6 +1519,16 @@ export default function App() {
                 title="ဒေတာအားလုံးကို အပြီးတိုင် ဖျက်ပစ်မည်"
               >
                 ဒေတာအားလုံးဖျက်မည်
+              </button>
+              <button
+                onClick={() => {
+                  handleRestoreFromCache();
+                  setShowSettingsModal(false);
+                }}
+                className="px-3 py-2 text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-lg text-xs font-bold cursor-pointer"
+                title="ဘရောက်ဆာ Cache မှ ဒေတာများ ပြန်လည်ရယူမည်"
+              >
+                Cache မှ ပြန်ယူမည်
               </button>
               <button
                 onClick={() => {
@@ -1849,6 +2081,13 @@ export default function App() {
         </div>
       </div>
     </div>
+
+    {showQRScanner && (
+      <QRScanner 
+        onScan={handleQRScanSuccess} 
+        onClose={() => setShowQRScanner(false)} 
+      />
+    )}
   </>
 );
 }

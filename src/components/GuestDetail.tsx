@@ -188,6 +188,7 @@ export default function GuestDetail({ guest, onClose, onEdit, onDelete, onStatus
     report += `====================================\n`;
     report += `👤 အမည်: ${guest.name} (${guest.age} နှစ်)\n`;
     report += `💳 မှတ်ပုံတင်အမှတ်: ${guest.nrc}\n`;
+    if (guest.phone) report += `📞 ဖုန်းနံပါတ်: ${guest.phone}\n`;
     if (guest.dob) report += `📅 မွေးသက္ကရာဇ်: ${guest.dob}\n`;
     if (guest.parents) report += `👨‍👩‍👦 မိဘအမည်: ${guest.parents}\n`;
     if (guest.ethnicityReligion) report += `🎋 လူမျိုး / ဘာသာ: ${guest.ethnicityReligion}\n`;
@@ -347,6 +348,13 @@ export default function GuestDetail({ guest, onClose, onEdit, onDelete, onStatus
                 <span className="text-xs text-slate-400 font-medium">မှတ်ပုံတင်အမှတ်</span>
                 <span className="font-semibold text-emerald-900 font-mono mt-0.5">{guest.nrc}</span>
               </div>
+
+              {guest.phone && (
+                <div className="flex flex-col border-b border-slate-50 pb-1.5">
+                  <span className="text-xs text-slate-400 font-medium">ဆက်သွယ်ရန်ဖုန်း</span>
+                  <span className="font-semibold text-slate-800 mt-0.5">{guest.phone}</span>
+                </div>
+              )}
 
               {guest.parents && (
                 <div className="flex flex-col sm:col-span-2 border-b border-slate-50 pb-1.5">
