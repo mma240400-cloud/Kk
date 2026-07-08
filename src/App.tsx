@@ -181,17 +181,25 @@ export default function App() {
 
   // Load guests on start
   useEffect(() => {
+    const initialized = localStorage.getItem('guest_registry_initialized');
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (stored) {
-      try {
-        setGuests(JSON.parse(stored));
-      } catch (e) {
-        console.error('Error loading guests from localStorage', e);
-        setGuests(INITIAL_GUESTS);
+    
+    if (initialized === 'true') {
+      if (stored) {
+        try {
+          setGuests(JSON.parse(stored));
+        } catch (e) {
+          console.error('Error loading guests from localStorage', e);
+          setGuests([]);
+        }
+      } else {
+        setGuests([]);
       }
     } else {
+      // First time loading - initialize with mock/demo data
       setGuests(INITIAL_GUESTS);
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_GUESTS));
+      localStorage.setItem('guest_registry_initialized', 'true');
     }
   }, []);
 
@@ -1057,24 +1065,38 @@ export default function App() {
               </div>
             </div>
 
-            <div className="bg-slate-50 border-t border-slate-100 p-3 flex gap-2 justify-end">
+            <div className="bg-slate-50 border-t border-slate-100 p-3 flex flex-wrap gap-2 justify-end">
               <button
                 onClick={() => {
-                  if (confirm('ဒေတာများအားလုံးကို အစဦးအခြေအနေသို့ ပြန်လည်သတ်မှတ်မည်ဖြစ်ပါသည်။ လက်ရှိစာရင်းများ ပျက်သွားပါမည်။ သေချာပါသလား?')) {
-                    localStorage.removeItem(LOCAL_STORAGE_KEY);
-                    setGuests(INITIAL_GUESTS);
+                  if (confirm('ဒေတာများအားလုံးကို လုံးဝ (လုံးဝ) ဖျက်ဆီးပစ်ရန် သေချာပါသလား? ဖျက်ပြီးပါက ပြန်လည်ရယူနိုင်မည် မဟုတ်ပါ။')) {
+                    saveGuestsToStorage([]);
+                    localStorage.setItem('guest_registry_initialized', 'true');
                     setShowSettingsModal(false);
-                    showToast('ဒေတာများကို အစဦးအခြေအနေသို့ ပြန်လည်သတ်မှတ်ပြီးပါပြီ');
+                    showToast('ဒေတာများအားလုံးကို လုံးဝဖျက်သိမ်းပြီးပါပြီ');
                   }
                 }}
-                className="px-3 py-2 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg text-xs font-bold mr-auto"
-                title="ဒေတာအားလုံးကို ဖျက်ပြီး မူလအတိုင်းထားမည်"
+                className="px-3 py-2 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg text-xs font-bold mr-auto cursor-pointer"
+                title="ဒေတာအားလုံးကို အပြီးတိုင် ဖျက်ပစ်မည်"
               >
                 ဒေတာအားလုံးဖျက်မည်
               </button>
               <button
+                onClick={() => {
+                  if (confirm('အစမ်းသရုပ်ပြဒေတာများကို ပြန်လည်ထည့်သွင်းလိုပါသလား? လက်ရှိဒေတာများအပေါ် ထပ်ရေးမည်ဖြစ်ပါသည်။')) {
+                    saveGuestsToStorage(INITIAL_GUESTS);
+                    localStorage.setItem('guest_registry_initialized', 'true');
+                    setShowSettingsModal(false);
+                    showToast('အစမ်းသရုပ်ပြဒေတာများ ထည့်သွင်းပြီးပါပြီ');
+                  }
+                }}
+                className="px-3 py-2 text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold cursor-pointer"
+                title="အစမ်းဒေတာများ ပြန်လည်ထည့်မည်"
+              >
+                အစမ်းဒေတာထည့်ရန်
+              </button>
+              <button
                 onClick={() => setShowSettingsModal(false)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer"
               >
                 ပိတ်မည်
               </button>
