@@ -34,3 +34,12 @@ export interface Guest {
 
 export type FilterStatus = 'all' | 'current' | 'departed';
 export type SortOption = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc' | 'stayDate';
+
+export interface ScanHistoryItem {
+  id: string;
+  timestamp: string;
+  rawData: string;
+  parsedGuestsCount: number;
+  namesSummary: string;
+}
+

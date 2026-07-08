@@ -32,14 +32,18 @@ import {
   Eye,
   EyeOff,
   FileText,
-  Camera
+  Camera,
+  History
 } from 'lucide-react';
-import { Guest, FilterStatus, SortOption } from './types';
+import { Guest, FilterStatus, SortOption, ScanHistoryItem } from './types';
 import { INITIAL_GUESTS } from './data/mockData';
 import GuestCard from './components/GuestCard';
 import GuestDetail from './components/GuestDetail';
 import GuestForm from './components/GuestForm';
 import QRScanner from './components/QRScanner';
+import CalendarView from './components/CalendarView';
+import ScanHistoryModal from './components/ScanHistoryModal';
+import CameraCapture from './components/CameraCapture';
 import QRCode from 'qrcode';
 
 const LOCAL_STORAGE_KEY = 'myanmar_guest_registry_data';
@@ -136,6 +140,25 @@ const getMonthRange = (offset: number) => {
 export default function App() {
   // Main database state
   const [guests, setGuests] = useState<Guest[]>([]);
+
+  // Calendar View State
+  const [showCalendarView, setShowCalendarView] = useState(false);
+
+  // Scan History States
+  const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>(() => {
+    try {
+      const stored = localStorage.getItem('guest_registry_scan_history');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [showScanHistoryModal, setShowScanHistoryModal] = useState(false);
+
+  // Organization/Neighborhood Logo State
+  const [orgLogo, setOrgLogo] = useState<string>(() => {
+    return localStorage.getItem('guest_registry_org_logo') || '';
+  });
   
   // Navigation & view states
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
@@ -350,6 +373,30 @@ export default function App() {
         if (parsed.length > 0) {
           setIncomingGuests(parsed);
           showToast(`QR Code မှ ဧည့်သည် ${parsed.length} ဦး၏ ဒေတာကို စစ်ဆေးနေပါသည်...`);
+          
+          // Add to scan history
+          const timestamp = new Date().toLocaleString('my-MM', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+          });
+          const namesSummary = parsed.map((g: any) => g.name).slice(0, 3).join('၊ ') + (parsed.length > 3 ? ' စသည်...' : '');
+          const newItem: ScanHistoryItem = {
+            id: String(Date.now()),
+            timestamp,
+            rawData: data.trim(),
+            parsedGuestsCount: parsed.length,
+            namesSummary
+          };
+          setScanHistory(prev => {
+            const filtered = prev.filter(item => item.rawData !== data.trim());
+            const updated = [newItem, ...filtered].slice(0, 5);
+            localStorage.setItem('guest_registry_scan_history', JSON.stringify(updated));
+            return updated;
+          });
         } else {
           showToast('တင်သွင်းရန် ဒေတာ မတွေ့ရှိပါ');
         }
@@ -919,8 +966,9 @@ export default function App() {
       </head>
       <body>
         <div class="report-container">
-          <div class="header">
-            <div class="title-area">
+          <div class="header" style="display: flex; align-items: center; gap: 16px;">
+            ${orgLogo ? `<img src="${orgLogo}" style="height: 60px; width: 60px; object-fit: cover; border-radius: 12px; border: 1px solid #cbd5e1;" />` : ''}
+            <div class="title-area" style="flex-grow: 1;">
               <h1>ဧည့်စာရင်း အကျဉ်းချုပ် သုံးသပ်ချက် အစီရင်ခံစာ</h1>
               <p>Myanmar Guest Registry - Administrative Summary</p>
             </div>
@@ -1264,84 +1312,120 @@ export default function App() {
         ) : (
           <>
             {/* Top Native-styled Header (Matching Screenshot 1) */}
-            <header className="bg-white rounded-2xl p-4 md:p-5 border border-slate-200 shadow-xs flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-emerald-600 text-white rounded-xl">
-                <Home size={22} />
-              </div>
-              <div>
-                <h1 className="font-bold text-xl md:text-2xl text-slate-900 flex items-center gap-2 tracking-tight">
-                  ဧည့်စာရင်း
-                </h1>
-                <p className="text-xs text-slate-400 font-medium">အိမ်ထောင်စု / ဧည့်သည်စာရင်း တိုင်ကြားစနစ်</p>
-              </div>
-            </div>
+            <header className="bg-white rounded-2xl p-4 md:p-5 border border-slate-200 shadow-xs flex flex-col gap-3.5">
+              {/* Brand Title Area - Full Width */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-emerald-600 text-white rounded-xl">
+                    <Home size={22} />
+                  </div>
+                  <div>
+                    <h1 className="font-bold text-lg md:text-xl text-slate-900 flex items-center gap-2 tracking-tight">
+                      ဧည့်စာရင်း
+                    </h1>
+                    <p className="text-[10px] md:text-xs text-slate-400 font-medium">အိမ်ထောင်စု / ဧည့်သည်စာရင်း တိုင်ကြားစနစ်</p>
+                  </div>
+                </div>
 
-            {/* Quick Action Buttons */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowQRScanner(true)}
-                className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold text-xs transition-transform active:scale-95 flex items-center gap-1.5 border border-indigo-100 shadow-2xs cursor-pointer"
-                title="ကင်မရာဖြင့် QR Scan ဖတ်ရန်"
-                id="scan-qr-header-btn"
-              >
-                <Camera size={14} className="text-indigo-600" />
-                <span>QR ဖတ်မည်</span>
-              </button>
-              {filteredAndSortedGuests.length > 0 && (
-                <button
-                  onClick={() => window.print()}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-xl font-bold text-xs transition-transform active:scale-95 flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                  title="လက်ရှိစာရင်းကို PDF အဖြစ် ထုတ်ယူရန်"
-                >
-                  <FileText size={14} className="text-slate-600" />
-                  <span>PDF ထုတ်မည်</span>
-                </button>
-              )}
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="p-2 bg-slate-50 hover:bg-slate-100 text-emerald-600 hover:text-emerald-800 rounded-xl transition-all border border-slate-100 cursor-pointer"
-                title="QR Code ဖြင့် မျှဝေရန်"
-                id="share-qr-header-btn"
-              >
-                <QrCode size={20} />
-              </button>
-              <button
-                onClick={() => setShowSettingsModal(true)}
-                className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 rounded-xl transition-all border border-slate-100 cursor-pointer"
-                title="စနစ် ဆက်တင်များ"
-              >
-                <Settings size={20} />
-              </button>
-              <button
-                onClick={() => {
-                  if (confirm('အက်ဒမင်စနစ်မှ ထွက်ခွာလိုပါသလား?')) {
-                    setIsAdminLoggedIn(false);
-                    localStorage.removeItem('is_admin_logged_in');
-                    showToast('အက်ဒမင်စနစ်မှ ထွက်ခွာပြီးပါပြီ');
-                  }
-                }}
-                className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-rose-600 rounded-xl transition-all border border-slate-100 cursor-pointer"
-                title="ထွက်ရန်"
-              >
-                <LogOut size={20} />
-              </button>
-              
-              {/* Desktop / Big screen Add Button */}
-              <button
-                onClick={() => {
-                  setEditingGuest(null);
-                  setIsFormOpen(true);
-                }}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-xs transition-transform active:scale-95 flex items-center gap-1.5 shadow-xs"
-                id="add-guest-header-btn"
-              >
-                <Plus size={16} />
-                အသစ်
-              </button>
-            </div>
-          </div>
+                {/* Logout Button */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      if (confirm('အက်ဒမင်စနစ်မှ ထွက်ခွာလိုပါသလား?')) {
+                        setIsAdminLoggedIn(false);
+                        localStorage.removeItem('is_admin_logged_in');
+                        showToast('အက်ဒမင်စနစ်မှ ထွက်ခွာပြီးပါပြီ');
+                      }
+                    }}
+                    className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition-all border border-rose-100 cursor-pointer flex items-center justify-center"
+                    title="ထွက်ရန်"
+                  >
+                    <LogOut size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons Row - Positioned Below the Title, Scrollable horizontally */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">စနစ်လုပ်ဆောင်ချက်များ</span>
+                  <span className="text-[9px] text-slate-400 animate-pulse font-medium md:hidden">ဘေးသို့ဆွဲ၍ကြည့်နိုင်သည် ↔</span>
+                </div>
+                
+                <div className="flex items-center gap-2 overflow-x-auto pb-2 -mb-1 scrollbar-none snap-x snap-mandatory -mx-4 px-4 md:mx-0 md:px-0">
+                  {/* Plus Add Guest Button - Highlighted & Sticky or placed first */}
+                  <button
+                    onClick={() => {
+                      setEditingGuest(null);
+                      setIsFormOpen(true);
+                    }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-transform active:scale-95 flex items-center gap-1.5 shadow-xs shrink-0 snap-start cursor-pointer"
+                    id="add-guest-header-btn"
+                  >
+                    <Plus size={14} />
+                    <span>အသစ်ထည့်မည်</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowQRScanner(true)}
+                    className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold text-xs transition-transform active:scale-95 flex items-center gap-1.5 border border-indigo-100 shadow-2xs cursor-pointer shrink-0 snap-start"
+                    title="ကင်မရာဖြင့် QR Scan ဖတ်ရန်"
+                    id="scan-qr-header-btn"
+                  >
+                    <Camera size={14} className="text-indigo-600" />
+                    <span>QR ဖတ်မည်</span>
+                  </button>
+                  
+                  {/* QR Scan History button */}
+                  <button
+                    onClick={() => setShowScanHistoryModal(true)}
+                    className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-indigo-700 rounded-xl transition-all border border-slate-150 cursor-pointer flex items-center justify-center shrink-0 snap-start"
+                    title="QR စကင်ဖတ်မှုမှတ်တမ်း ကြည့်မည်"
+                    id="scan-history-header-btn"
+                  >
+                    <History size={18} />
+                  </button>
+
+                  {filteredAndSortedGuests.length > 0 && (
+                    <button
+                      onClick={() => window.print()}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-xl font-bold text-xs transition-transform active:scale-95 flex items-center gap-1.5 shadow-2xs cursor-pointer shrink-0 snap-start"
+                      title="လက်ရှိစာရင်းကို PDF အဖြစ် ထုတ်ယူရန်"
+                    >
+                      <FileText size={14} className="text-slate-600" />
+                      <span>PDF ထုတ်မည်</span>
+                    </button>
+                  )}
+
+                  {/* Calendar View button */}
+                  <button
+                    onClick={() => setShowCalendarView(true)}
+                    className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl font-bold text-xs transition-transform active:scale-95 flex items-center gap-1.5 border border-emerald-100 shadow-2xs cursor-pointer shrink-0 snap-start"
+                    title="ဧည့်သည်တည်းခိုသည့်ရက်များကို ပြက္ခဒိန်ဖြင့် ကြည့်ရန်"
+                    id="calendar-view-header-btn"
+                  >
+                    <Calendar size={14} className="text-emerald-600" />
+                    <span>ပြက္ခဒိန်</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowShareModal(true)}
+                    className="p-2 bg-slate-50 hover:bg-slate-100 text-emerald-600 hover:text-emerald-800 rounded-xl transition-all border border-slate-150 cursor-pointer shrink-0 snap-start"
+                    title="QR Code ဖြင့် မျှဝေရန်"
+                    id="share-qr-header-btn"
+                  >
+                    <QrCode size={18} />
+                  </button>
+
+                  <button
+                    onClick={() => setShowSettingsModal(true)}
+                    className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 rounded-xl transition-all border border-slate-150 cursor-pointer shrink-0 snap-start"
+                    title="စနစ် ဆက်တင်များ"
+                  >
+                    <Settings size={18} />
+                  </button>
+                </div>
+              </div>
 
           {/* Admin Details Row */}
           <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
@@ -1898,7 +1982,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-4 space-y-4">
+            <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
               <div className="flex flex-col">
                 <label className="text-xs font-semibold text-slate-600 mb-1" htmlFor="set-admin-phone">
                   အက်ဒမင် ဖုန်းနံပါတ် / ဆက်သွယ်ရန်
@@ -1947,6 +2031,35 @@ export default function App() {
                     {showAdminPasscode ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
+              </div>
+
+              {/* Organization logo section */}
+              <div className="flex flex-col border-t border-slate-100 pt-3">
+                <label className="text-xs font-semibold text-slate-600 mb-1.5">
+                  ရပ်ကွက် / အဖွဲ့အစည်း လိုဂိုပုံ
+                </label>
+                <CameraCapture
+                  onCapture={(base64) => {
+                    setOrgLogo(base64);
+                    localStorage.setItem('guest_registry_org_logo', base64);
+                    showToast('အဖွဲ့အစည်းလိုဂိုပုံ သိမ်းဆည်းပြီးပါပြီ');
+                  }}
+                  currentImage={orgLogo}
+                  label="လိုဂိုပုံ ရိုက်ရန်/တင်ရန်"
+                />
+                {orgLogo && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrgLogo('');
+                      localStorage.removeItem('guest_registry_org_logo');
+                      showToast('အဖွဲ့အစည်းလိုဂိုပုံကို ဖျက်လိုက်ပါပြီ');
+                    }}
+                    className="mt-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[10px] font-bold self-center transition-colors cursor-pointer"
+                  >
+                    လိုဂိုပုံ ပြန်ဖျက်မည်
+                  </button>
+                )}
               </div>
 
               {/* Information disclaimer */}
@@ -2456,6 +2569,9 @@ export default function App() {
     {/* Printable Only Section */}
     <div className="hidden print:block bg-white text-black p-8 font-sans w-full max-w-4xl mx-auto">
       <div className="text-center mb-6 border-b-2 border-slate-900 pb-4">
+        {orgLogo && (
+          <img src={orgLogo} alt="Organization Logo" className="w-16 h-16 object-contain mx-auto mb-3" />
+        )}
         <h1 className="text-2xl font-bold tracking-wide">ဧည့်သည်စာရင်း တိုင်ကြားလွှာမှတ်တမ်း</h1>
         <p className="text-sm mt-1 text-slate-600 font-medium">အိမ်ထောင်စု / ဧည့်သည်စာရင်း စီမံခန့်ခွဲမှုစနစ် (ဧည့်စာရင်းစနစ်)</p>
         <div className="text-xs text-left mt-5 flex justify-between font-semibold text-slate-700">
@@ -2539,6 +2655,31 @@ export default function App() {
       <QRScanner 
         onScan={handleQRScanSuccess} 
         onClose={() => setShowQRScanner(false)} 
+      />
+    )}
+
+    {showCalendarView && (
+      <CalendarView
+        guests={guests}
+        onClose={() => setShowCalendarView(false)}
+        labelCurrent={labelCurrent}
+        labelDeparted={labelDeparted}
+      />
+    )}
+
+    {showScanHistoryModal && (
+      <ScanHistoryModal
+        history={scanHistory}
+        onReImport={(rawData) => {
+          setShowScanHistoryModal(false);
+          handleQRScanSuccess(rawData);
+        }}
+        onClearHistory={() => {
+          setScanHistory([]);
+          localStorage.removeItem('guest_registry_scan_history');
+          showToast('စကင်မှတ်တမ်းအားလုံးကို ဖျက်ပြီးပါပြီ');
+        }}
+        onClose={() => setShowScanHistoryModal(false)}
       />
     )}
   </>
