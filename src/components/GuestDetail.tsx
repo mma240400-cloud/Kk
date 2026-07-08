@@ -16,7 +16,10 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
-  Clock
+  Clock,
+  ZoomIn,
+  ZoomOut,
+  Maximize2
 } from 'lucide-react';
 import { Guest, FamilyMember } from '../types';
 
@@ -31,10 +34,85 @@ interface GuestDetailProps {
 export default function GuestDetail({ guest, onClose, onEdit, onDelete, onStatusToggle }: GuestDetailProps) {
   const [activePhoto, setActivePhoto] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  
+  // Photo Zoom and Pan/Drag states
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   const triggerCopyFeedback = (msg: string) => {
     setCopySuccess(msg);
     setTimeout(() => setCopySuccess(null), 2500);
+  };
+
+  const handleClosePhoto = () => {
+    setActivePhoto(null);
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+    setIsDragging(false);
+  };
+
+  const handleZoomIn = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setScale(prev => Math.min(prev + 0.25, 4));
+  };
+
+  const handleZoomOut = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setScale(prev => {
+      const next = Math.max(prev - 0.25, 0.5);
+      if (next <= 1) {
+        setPosition({ x: 0, y: 0 });
+      }
+      return next;
+    });
+  };
+
+  const handleResetZoom = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (scale <= 1) return;
+    e.preventDefault();
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    setPosition({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (scale <= 1 || e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    setIsDragging(true);
+    setDragStart({ x: touch.clientX - position.x, y: touch.clientY - position.y });
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    setPosition({
+      x: touch.clientX - dragStart.x,
+      y: touch.clientY - dragStart.y
+    });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
   };
 
   // 1. Download Photo
@@ -418,19 +496,20 @@ export default function GuestDetail({ guest, onClose, onEdit, onDelete, onStatus
           </div>
         </div>
 
-        {/* Full Screen Photo Lightbox (Mobile viewer / downloader) */}
+        {/* Full Screen Photo Lightbox (Mobile viewer / downloader with Zoom & Pan) */}
         {activePhoto && (
           <div
-            className="fixed inset-0 bg-black/95 flex flex-col items-center justify-center p-4 z-50 animate-in fade-in duration-200"
-            onClick={() => setActivePhoto(null)}
+            className="fixed inset-0 bg-black/95 flex flex-col items-center justify-center p-4 z-50 animate-in fade-in duration-200 select-none"
+            onClick={handleClosePhoto}
           >
-            <div className="absolute top-4 right-4 flex gap-2">
+            {/* Top Toolbar */}
+            <div className="absolute top-4 right-4 flex gap-2 z-10">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   handleCopyPhoto(activePhoto);
                 }}
-                className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors cursor-pointer"
                 title="ဓာတ်ပုံ ကူးယူရန်"
               >
                 <Copy size={20} />
@@ -440,7 +519,7 @@ export default function GuestDetail({ guest, onClose, onEdit, onDelete, onStatus
                   e.stopPropagation();
                   handleDownloadPhoto(activePhoto, 'photo_large');
                 }}
-                className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors cursor-pointer"
                 title="ဓာတ်ပုံ ဒေါင်းလုဒ်"
               >
                 <Download size={20} />
@@ -448,26 +527,82 @@ export default function GuestDetail({ guest, onClose, onEdit, onDelete, onStatus
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setActivePhoto(null);
+                  handleClosePhoto();
                 }}
-                className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors cursor-pointer"
                 title="ပိတ်ရန်"
               >
                 <X size={20} />
               </button>
             </div>
-            
-            <img
-              src={activePhoto}
-              alt="Full view"
-              referrerPolicy="no-referrer"
-              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+
+            {/* Zoomable Image Container */}
+            <div 
+              className="w-full h-[70vh] flex items-center justify-center overflow-hidden relative cursor-grab active:cursor-grabbing"
               onClick={(e) => e.stopPropagation()}
-            />
-            
-            <p className="text-slate-400 text-xs mt-4 text-center select-none">
-              ပိတ်ရန် မည်သည့်နေရာမဆို ကလစ်နှိပ်နိုင်ပါသည်
-            </p>
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              <img
+                src={activePhoto}
+                alt="Full view"
+                referrerPolicy="no-referrer"
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl select-none pointer-events-none"
+                style={{
+                  transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                  transition: isDragging ? 'none' : 'transform 0.15s ease-out',
+                }}
+              />
+            </div>
+
+            {/* Bottom Controls */}
+            <div className="flex flex-col items-center gap-3 mt-4 z-10" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 shadow-lg">
+                <button
+                  onClick={handleZoomOut}
+                  disabled={scale <= 0.5}
+                  className="p-1.5 bg-white/5 hover:bg-white/10 text-white disabled:text-white/30 disabled:hover:bg-transparent rounded-lg transition-colors cursor-pointer"
+                  title="ချုံ့ရန် (Zoom Out)"
+                >
+                  <ZoomOut size={18} />
+                </button>
+                
+                <span className="text-white text-xs font-bold font-mono min-w-[50px] text-center">
+                  {Math.round(scale * 100)}%
+                </span>
+
+                <button
+                  onClick={handleZoomIn}
+                  disabled={scale >= 4}
+                  className="p-1.5 bg-white/5 hover:bg-white/10 text-white disabled:text-white/30 disabled:hover:bg-transparent rounded-lg transition-colors cursor-pointer"
+                  title="ချဲ့ရန် (Zoom In)"
+                >
+                  <ZoomIn size={18} />
+                </button>
+
+                <div className="w-[1px] h-4 bg-white/20 mx-1" />
+
+                <button
+                  onClick={handleResetZoom}
+                  className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                  title="မူလအရွယ်အစား (1:1)"
+                >
+                  <Maximize2 size={12} />
+                  <span>မူလအတိုင်း</span>
+                </button>
+              </div>
+
+              <p className="text-slate-400 text-[11px] text-center max-w-xs leading-normal">
+                {scale > 1 
+                  ? 'ပုံကို ရွှေ့ကြည့်ရန် ဖိ၍ ဆွဲရွှေ့နိုင်ပါသည်' 
+                  : 'ပိတ်ရန် မည်သည့်နေရာမဆို နှိပ်နိုင်ပါသည်'}
+              </p>
+            </div>
           </div>
         )}
       </div>

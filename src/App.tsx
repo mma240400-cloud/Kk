@@ -27,7 +27,8 @@ import {
   Check,
   Calendar,
   Lock,
-  Unlock
+  Unlock,
+  Printer
 } from 'lucide-react';
 import { Guest, FilterStatus, SortOption } from './types';
 import { INITIAL_GUESTS } from './data/mockData';
@@ -167,6 +168,9 @@ export default function App() {
   const [loginError, setLoginError] = useState('');
   const [showPublicSuccess, setShowPublicSuccess] = useState(false);
   
+  // Bulk Selection States
+  const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
+  
   // Copy feedback toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -178,6 +182,21 @@ export default function App() {
     const totalFamily = guests.reduce((sum, g) => sum + (g.familyMembers?.length || 0), 0);
     return { total, current, departed, totalFamily };
   }, [guests]);
+
+  const isDateFilterActive = !!(filterStartDate || filterEndDate);
+
+  const dateFilteredGuestsCount = useMemo(() => {
+    if (!isDateFilterActive) return guests.length;
+    return guests.filter((guest) => {
+      if (filterStartDate) {
+        if (guest.stayTo && guest.stayTo < filterStartDate) return false;
+      }
+      if (filterEndDate) {
+        if (guest.stayFrom && guest.stayFrom > filterEndDate) return false;
+      }
+      return true;
+    }).length;
+  }, [guests, filterStartDate, filterEndDate, isDateFilterActive]);
 
   // Load guests on start
   useEffect(() => {
@@ -221,6 +240,13 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('guest_registry_admin_passcode', adminPasscode);
   }, [adminPasscode]);
+
+  // Clear selections when admin status changes (logout)
+  useEffect(() => {
+    if (!isAdminLoggedIn) {
+      setSelectedGuestIds([]);
+    }
+  }, [isAdminLoggedIn]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -513,8 +539,38 @@ export default function App() {
       const updated = guests.filter(g => g.id !== id);
       saveGuestsToStorage(updated);
       setSelectedGuestId(null);
+      setSelectedGuestIds(prev => prev.filter(item => item !== id));
       showToast('ဧည့်သည်စာရင်းကို ဖျက်သိမ်းပြီးပါပြီ');
     }
+  };
+
+  // Bulk Delete selected guests
+  const handleBulkDelete = () => {
+    if (selectedGuestIds.length === 0) return;
+    
+    if (confirm(`ရွေးချယ်ထားသော ဧည့်သည် ${selectedGuestIds.length} ဦး၏ အချက်အလက်များအားလုံးကို စာရင်းမှ လုံးဝဖျက်ပစ်ရန် သေချာပါသလား?`)) {
+      const updated = guests.filter(g => !selectedGuestIds.includes(g.id));
+      saveGuestsToStorage(updated);
+      
+      // If the currently viewed guest was deleted, close the details modal
+      if (selectedGuestId && selectedGuestIds.includes(selectedGuestId)) {
+        setSelectedGuestId(null);
+      }
+      
+      setSelectedGuestIds([]);
+      showToast('ရွေးချယ်ထားသော ဧည့်သည်စာရင်းများကို ဖျက်သိမ်းပြီးပါပြီ');
+    }
+  };
+
+  // Toggle selection for a single guest
+  const handleToggleSelectGuest = (id: string) => {
+    setSelectedGuestIds(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(item => item !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
   };
 
   // Backup Database (Export JSON)
@@ -571,7 +627,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-slate-800 font-sans flex flex-col pb-12">
+    <>
+      <div className="min-h-screen bg-[#F8F9FA] text-slate-800 font-sans flex flex-col pb-12 print:hidden">
       
       {/* Toast Notification */}
       {toastMessage && (
@@ -708,14 +765,46 @@ export default function App() {
           <>
             {/* Statistics Cards (Only on Main Dashboard) */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-white p-3.5 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center flex-shrink-0">
-                  <Users size={18} />
+              <div className={`p-3.5 rounded-2xl border shadow-xs flex items-center justify-between gap-2 transition-all duration-300 relative overflow-hidden ${
+                isDateFilterActive 
+                  ? 'bg-emerald-50/40 border-emerald-200/80 ring-1 ring-emerald-400/20' 
+                  : 'bg-white border-slate-150'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${
+                    isDateFilterActive 
+                      ? 'bg-emerald-100 text-emerald-700' 
+                      : 'bg-slate-100 text-slate-700'
+                  }`}>
+                    <Users size={18} className={isDateFilterActive ? "animate-pulse" : ""} />
+                  </div>
+                  <div>
+                    <div className={`text-[10px] font-bold uppercase tracking-wider transition-colors duration-300 ${
+                      isDateFilterActive ? 'text-emerald-700/90' : 'text-slate-400'
+                    }`}>
+                      {isDateFilterActive ? 'သတ်မှတ်ရက်အတွင်း ဧည့်သည်' : 'ဧည့်သည်စုစုပေါင်း'}
+                    </div>
+                    <div className={`text-lg font-bold transition-colors duration-300 ${
+                      isDateFilterActive ? 'text-emerald-800' : 'text-slate-800'
+                    }`}>
+                      {isDateFilterActive ? dateFilteredGuestsCount : stats.total} ဦး
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ဧည့်သည်စုစုပေါင်း</div>
-                  <div className="text-lg font-bold text-slate-800">{stats.total} ဦး</div>
-                </div>
+                
+                {isDateFilterActive && (
+                  <button
+                    onClick={() => {
+                      setFilterStartDate('');
+                      setFilterEndDate('');
+                      showToast('ရက်စွဲစစ်ထုတ်မှုအားလုံးကို ဖျက်လိုက်ပါပြီ');
+                    }}
+                    className="p-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-all cursor-pointer"
+                    title="ရက်စွဲ စစ်ထုတ်မှုကို ပြန်ဖျက်ရန်"
+                  >
+                    <span className="text-[10px] font-extrabold px-1.5">× ဖျက်မည်</span>
+                  </button>
+                )}
               </div>
 
               <div className="bg-white p-3.5 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3">
@@ -927,11 +1016,72 @@ export default function App() {
               </div>
             </div>
 
-            {/* Search result summary (if filters applied) */}
-            {(searchQuery || statusFilter !== 'all' || filterStartDate || filterEndDate) && (
-              <p className="text-xs font-medium text-slate-400 px-1">
-                ရှာဖွေတွေ့ရှိသည့် ရလဒ် - <span className="text-slate-600 font-bold">{filteredAndSortedGuests.length} ဦး</span>
+            {/* Results count & Printing Action Bar */}
+            <div className="flex items-center justify-between gap-3 px-1.5 py-1 flex-wrap">
+              <p className="text-xs font-bold text-slate-500">
+                {(searchQuery || statusFilter !== 'all' || filterStartDate || filterEndDate) ? (
+                  <>
+                    ရှာဖွေတွေ့ရှိသည့် ရလဒ် - <span className="text-emerald-700 font-extrabold">{filteredAndSortedGuests.length} ဦး</span>
+                  </>
+                ) : (
+                  <>
+                    စာရင်းဝင်ဧည့်သည်စုစုပေါင်း - <span className="text-slate-700 font-extrabold">{filteredAndSortedGuests.length} ဦး</span>
+                  </>
+                )}
               </p>
+              
+              <div className="flex items-center gap-2 flex-wrap">
+                {filteredAndSortedGuests.length > 0 && (
+                  <button
+                    onClick={() => window.print()}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs hover:shadow-md active:scale-95 transition-all cursor-pointer"
+                    title="လက်ရှိစာရင်းကို ပုံနှိပ်ထုတ်ယူရန် သို့မဟုတ် PDF သိမ်းဆည်းရန်"
+                  >
+                    <Printer size={14} />
+                    <span>စာရင်းထုတ်မည် / PDF သိမ်းမည်</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Admin Bulk Action Controls */}
+            {isAdminLoggedIn && filteredAndSortedGuests.length > 0 && (
+              <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3 px-4 shadow-2xs -mt-1">
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    id="bulk-select-all"
+                    checked={filteredAndSortedGuests.length > 0 && filteredAndSortedGuests.every(g => selectedGuestIds.includes(g.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedGuestIds(filteredAndSortedGuests.map(g => g.id));
+                      } else {
+                        setSelectedGuestIds([]);
+                      }
+                    }}
+                    className="w-5 h-5 text-emerald-600 border-slate-300 rounded-lg focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                  />
+                  <label htmlFor="bulk-select-all" className="text-xs font-extrabold text-slate-600 cursor-pointer select-none">
+                    ဧည့်သည်အားလုံးကို ရွေးချယ်မည် ({filteredAndSortedGuests.length} ဦး)
+                  </label>
+                </div>
+
+                {selectedGuestIds.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500 bg-slate-200/60 px-2.5 py-1 rounded-lg">
+                      {selectedGuestIds.length} ဦး ရွေးချယ်ပြီး
+                    </span>
+                    <button
+                      onClick={handleBulkDelete}
+                      className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 hover:shadow-md active:scale-95 transition-all cursor-pointer"
+                      title="ရွေးချယ်ထားသော ဧည့်သည်စာရင်းများကို အမြန်ဖျက်မည်"
+                    >
+                      <Trash2 size={13} />
+                      <span>ရွေးချယ်ထားသည်များ အစုလိုက်ဖျက်မည်</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Guest List container */}
@@ -970,6 +1120,8 @@ export default function App() {
                       guest={guest}
                       onClick={() => setSelectedGuestId(guest.id)}
                       onCopyInfo={(e) => handleCopySingleGuestInfo(guest, e)}
+                      isSelected={isAdminLoggedIn && selectedGuestIds.includes(guest.id)}
+                      onSelectToggle={isAdminLoggedIn ? () => handleToggleSelectGuest(guest.id) : undefined}
                     />
                   ))}
                 </div>
@@ -1435,5 +1587,88 @@ export default function App() {
       )}
 
     </div>
-  );
+
+    {/* Printable Only Section */}
+    <div className="hidden print:block bg-white text-black p-8 font-sans w-full max-w-4xl mx-auto">
+      <div className="text-center mb-6 border-b-2 border-slate-900 pb-4">
+        <h1 className="text-2xl font-bold tracking-wide">ဧည့်သည်စာရင်း တိုင်ကြားလွှာမှတ်တမ်း</h1>
+        <p className="text-sm mt-1 text-slate-600 font-medium">အိမ်ထောင်စု / ဧည့်သည်စာရင်း စီမံခန့်ခွဲမှုစနစ် (ဧည့်စာရင်းစနစ်)</p>
+        <div className="text-xs text-left mt-5 flex justify-between font-semibold text-slate-700">
+          <span>ထုတ်ယူသည့်ရက်စွဲ: {new Date().toLocaleDateString('my-MM', { dateStyle: 'long' })}</span>
+          <span>စာရင်းဝင်ဧည့်သည် စုစုပေါင်း: {filteredAndSortedGuests.length} ဦး</span>
+        </div>
+      </div>
+
+      <table className="w-full border-collapse border border-slate-800 text-xs text-left">
+        <thead>
+          <tr className="bg-slate-100 font-bold">
+            <th className="border border-slate-800 p-2 text-center w-10">စဥ်</th>
+            <th className="border border-slate-800 p-2 w-16 text-center">ဓာတ်ပုံ</th>
+            <th className="border border-slate-800 p-2">အမည် / အသက်</th>
+            <th className="border border-slate-800 p-2">မှတ်ပုံတင်အမှတ်</th>
+            <th className="border border-slate-800 p-2">မိဘအမည်</th>
+            <th className="border border-slate-800 p-2">လာရာဒေသ / အကြောင်းအရာ</th>
+            <th className="border border-slate-800 p-2">တည်းခိုမည့်ကာလ</th>
+            <th className="border border-slate-800 p-2 w-20 text-center">အခြေအနေ</th>
+            <th className="border border-slate-800 p-2">မိသားစုဝင်များ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredAndSortedGuests.map((guest, index) => (
+            <tr key={guest.id} className="align-top">
+              <td className="border border-slate-800 p-2 text-center font-bold">{index + 1}</td>
+              <td className="border border-slate-800 p-2 text-center">
+                {guest.photo ? (
+                  <img src={guest.photo} className="w-12 h-12 object-cover mx-auto rounded border border-slate-300 animate-none" />
+                ) : (
+                  <span className="text-slate-400 text-[10px]">မရှိပါ</span>
+                )}
+              </td>
+              <td className="border border-slate-800 p-2 font-bold">
+                {guest.name} <span className="text-slate-600 font-normal">({guest.age} နှစ်)</span>
+              </td>
+              <td className="border border-slate-800 p-2 font-mono font-medium">{guest.nrc}</td>
+              <td className="border border-slate-800 p-2">{guest.parents || '-'}</td>
+              <td className="border border-slate-800 p-2">
+                <div className="font-semibold">{guest.origin}</div>
+                {guest.reason && <div className="text-[10px] text-slate-500 mt-1">({guest.reason})</div>}
+              </td>
+              <td className="border border-slate-800 p-2 font-medium">
+                {guest.stayFrom} မှ <br/>{guest.stayTo} ထိ
+              </td>
+              <td className="border border-slate-800 p-2 text-center font-bold">
+                {guest.isCurrent ? 'နေထိုင်ဆဲ' : 'ထွက်ခွာပြီး'}
+              </td>
+              <td className="border border-slate-800 p-2 text-[11px]">
+                {guest.familyMembers && guest.familyMembers.length > 0 ? (
+                  <ul className="list-decimal pl-4 space-y-0.5">
+                    {guest.familyMembers.map((m) => (
+                      <li key={m.id}>
+                        {m.name} ({m.relation} - {m.age} နှစ်)
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="text-slate-400 font-normal">-</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Footer signature line for Print */}
+      <div className="mt-16 flex justify-between text-xs font-semibold px-4">
+        <div className="text-center">
+          <div className="border-b border-slate-400 w-36 mb-1 mx-auto h-8"></div>
+          <span>စစ်ဆေးသူ (အက်ဒမင်) လက်မှတ်</span>
+        </div>
+        <div className="text-center">
+          <div className="border-b border-slate-400 w-36 mb-1 mx-auto h-8"></div>
+          <span>တိုင်ကြားသူ (အိမ်ရှင်) လက်မှတ်</span>
+        </div>
+      </div>
+    </div>
+  </>
+);
 }
