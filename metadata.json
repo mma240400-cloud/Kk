@@ -1,0 +1,6 @@
+{
+  "name": "ဧည့်စာရင်း (Myanmar Guest List)",
+  "description": "မြန်မာနိုင်ငံ ဧည့်စာရင်းနှင့် အိမ်ထောင်စုဝင်များ စာရင်းသွင်း၊ စစ်ဆေး၊ ဒေါင်းလုဒ်ဆွဲနိုင်သည့်စနစ် (Myanmar Guest & Family Member Registry with photo download and clipboard copy support)",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
