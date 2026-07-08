@@ -14,9 +14,11 @@ interface GuestFormProps {
   onCancel?: () => void;
   isPublicForm?: boolean;
   onAdminLoginClick?: () => void;
+  labelCurrent?: string;
+  labelDeparted?: string;
 }
 
-export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm = false, onAdminLoginClick }: GuestFormProps) {
+export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm = false, onAdminLoginClick, labelCurrent = 'နေထိုင်ဆဲ', labelDeparted = 'ထွက်ခွာပြီး' }: GuestFormProps) {
   // Main form fields
   const [name, setName] = useState('');
   const [photo, setPhoto] = useState<string>('');
@@ -333,7 +335,7 @@ export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm
                     onChange={() => setIsCurrent(true)}
                     className="accent-emerald-600"
                   />
-                  ဒီမှာနေထိုင်ဆဲ
+                  {labelCurrent}
                 </label>
                 <label className="flex-1 flex items-center justify-center gap-2 border border-slate-200 bg-slate-50 text-slate-700 py-2.5 rounded-xl cursor-pointer transition-all hover:bg-slate-100 font-medium">
                   <input
@@ -342,7 +344,7 @@ export default function GuestForm({ initialGuest, onSave, onCancel, isPublicForm
                     onChange={() => setIsCurrent(false)}
                     className="accent-slate-600"
                   />
-                  မနေထိုင်တော့ပါ
+                  {labelDeparted}
                 </label>
               </div>
             </div>

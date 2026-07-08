@@ -28,7 +28,9 @@ import {
   Calendar,
   Lock,
   Unlock,
-  Printer
+  Printer,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Guest, FilterStatus, SortOption } from './types';
 import { INITIAL_GUESTS } from './data/mockData';
@@ -158,6 +160,40 @@ export default function App() {
     return localStorage.getItem('guest_registry_admin_passcode') || '123456';
   });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  // Dynamic button/status labels state
+  const [labelAll, setLabelAll] = useState(() => {
+    return localStorage.getItem('guest_registry_label_all') || 'အားလုံး';
+  });
+  const [labelCurrent, setLabelCurrent] = useState(() => {
+    return localStorage.getItem('guest_registry_label_current') || 'နေထိုင်ဆဲ';
+  });
+  const [labelDeparted, setLabelDeparted] = useState(() => {
+    return localStorage.getItem('guest_registry_label_departed') || 'ထွက်ခွာပြီး';
+  });
+  const [showEditLabelsModal, setShowEditLabelsModal] = useState(false);
+  const [tempLabelAll, setTempLabelAll] = useState('');
+  const [tempLabelCurrent, setTempLabelCurrent] = useState('');
+  const [tempLabelDeparted, setTempLabelDeparted] = useState('');
+
+  // Sync temp labels when opening the modal
+  useEffect(() => {
+    if (showEditLabelsModal) {
+      setTempLabelAll(labelAll);
+      setTempLabelCurrent(labelCurrent);
+      setTempLabelDeparted(labelDeparted);
+    }
+  }, [showEditLabelsModal, labelAll, labelCurrent, labelDeparted]);
+
+  const saveLabels = (all: string, current: string, departed: string) => {
+    setLabelAll(all);
+    setLabelCurrent(current);
+    setLabelDeparted(departed);
+    localStorage.setItem('guest_registry_label_all', all);
+    localStorage.setItem('guest_registry_label_current', current);
+    localStorage.setItem('guest_registry_label_departed', departed);
+    showToast('ခလုတ်စာသားများကို ပြင်ဆင်ပြီးပါပြီ');
+  };
   
   // Admin Login States
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
@@ -166,6 +202,8 @@ export default function App() {
   const [showAdminLoginModal, setShowAdminLoginModal] = useState(false);
   const [loginPasscode, setLoginPasscode] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [showLoginPasscode, setShowLoginPasscode] = useState(false);
+  const [showAdminPasscode, setShowAdminPasscode] = useState(false);
   const [showPublicSuccess, setShowPublicSuccess] = useState(false);
   
   // Bulk Selection States
@@ -646,6 +684,8 @@ export default function App() {
             isPublicForm={true}
             onSave={handleSaveGuest}
             onAdminLoginClick={() => setShowAdminLoginModal(true)}
+            labelCurrent={labelCurrent}
+            labelDeparted={labelDeparted}
           />
         ) : (
           <>
@@ -760,6 +800,8 @@ export default function App() {
               setIsFormOpen(false);
               setEditingGuest(null);
             }}
+            labelCurrent={labelCurrent}
+            labelDeparted={labelDeparted}
           />
         ) : (
           <>
@@ -812,7 +854,7 @@ export default function App() {
                   <CheckCircle2 size={18} />
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-wider">လက်ရှိနေထိုင်ဆဲ</div>
+                  <div className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-wider">{labelCurrent}</div>
                   <div className="text-lg font-bold text-emerald-800">{stats.current} ဦး</div>
                 </div>
               </div>
@@ -822,7 +864,7 @@ export default function App() {
                   <AlertCircle size={18} />
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ထွက်ခွာပြီး</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{labelDeparted}</div>
                   <div className="text-lg font-bold text-slate-600">{stats.departed} ဦး</div>
                 </div>
               </div>
@@ -864,7 +906,7 @@ export default function App() {
               {/* Status Filters and Sort Segmented controls */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                 {/* Segmented Filter */}
-                <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-semibold text-slate-600 w-full sm:w-auto">
+                <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-semibold text-slate-600 w-full sm:w-auto items-center gap-0.5">
                   <button
                     onClick={() => setStatusFilter('all')}
                     className={`flex-1 sm:flex-initial px-4 py-1.5 rounded-lg transition-all ${
@@ -873,7 +915,7 @@ export default function App() {
                         : 'hover:text-slate-950'
                     }`}
                   >
-                    အားလုံး ({stats.total})
+                    {labelAll} ({stats.total})
                   </button>
                   <button
                     onClick={() => setStatusFilter('current')}
@@ -883,7 +925,7 @@ export default function App() {
                         : 'hover:text-slate-950'
                     }`}
                   >
-                    နေထိုင်ဆဲ ({stats.current})
+                    {labelCurrent} ({stats.current})
                   </button>
                   <button
                     onClick={() => setStatusFilter('departed')}
@@ -893,8 +935,18 @@ export default function App() {
                         : 'hover:text-slate-950'
                     }`}
                   >
-                    ထွက်ခွာပြီး ({stats.departed})
+                    {labelDeparted} ({stats.departed})
                   </button>
+                  
+                  {isAdminLoggedIn && (
+                    <button
+                      onClick={() => setShowEditLabelsModal(true)}
+                      className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-white rounded-lg transition-all cursor-pointer flex-shrink-0 ml-1"
+                      title="ခလုတ်စာသားများ ပြင်ဆင်ရန်"
+                    >
+                      <SlidersHorizontal size={12} />
+                    </button>
+                  )}
                 </div>
 
                 {/* Sort dropdown */}
@@ -1122,6 +1174,8 @@ export default function App() {
                       onCopyInfo={(e) => handleCopySingleGuestInfo(guest, e)}
                       isSelected={isAdminLoggedIn && selectedGuestIds.includes(guest.id)}
                       onSelectToggle={isAdminLoggedIn ? () => handleToggleSelectGuest(guest.id) : undefined}
+                      labelCurrent={labelCurrent}
+                      labelDeparted={labelDeparted}
                     />
                   ))}
                 </div>
@@ -1147,6 +1201,8 @@ export default function App() {
             handleDeleteGuest(selectedGuest.id);
           }}
           onStatusToggle={handleStatusToggle}
+          labelCurrent={labelCurrent}
+          labelDeparted={labelDeparted}
         />
       )}
 
@@ -1198,14 +1254,24 @@ export default function App() {
                 <label className="text-xs font-semibold text-slate-600 mb-1" htmlFor="set-admin-passcode">
                   အက်ဒမင် ဝင်ရောက်ရန် လျှို့ဝှက်နံပါတ် (Passcode)
                 </label>
-                <input
-                  id="set-admin-passcode"
-                  type="text"
-                  value={adminPasscode}
-                  onChange={(e) => setAdminPasscode(e.target.value)}
-                  placeholder="ဥပမာ - ၁၂၃၄၅၆"
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-800 font-medium"
-                />
+                <div className="relative">
+                  <input
+                    id="set-admin-passcode"
+                    type={showAdminPasscode ? "text" : "password"}
+                    value={adminPasscode}
+                    onChange={(e) => setAdminPasscode(e.target.value)}
+                    placeholder="ဥပမာ - ၁၂၃၄၅၆"
+                    className="w-full pl-3 pr-10 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-800 font-medium tracking-widest"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPasscode(!showAdminPasscode)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg cursor-pointer flex items-center justify-center"
+                    title={showAdminPasscode ? "လျှို့ဝှက်နံပါတ် ဖျောက်မည်" : "လျှို့ဝှက်နံပါတ် ပြမည်"}
+                  >
+                    {showAdminPasscode ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
               </div>
 
               {/* Information disclaimer */}
@@ -1251,6 +1317,107 @@ export default function App() {
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer"
               >
                 ပိတ်မည်
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Labels Modal */}
+      {showEditLabelsModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150">
+            <div className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-1.5">
+                <SlidersHorizontal size={16} className="text-emerald-400" />
+                ခလုတ်စာသားများ ပြင်ဆင်ရန်
+              </h3>
+              <button
+                onClick={() => setShowEditLabelsModal(false)}
+                className="text-slate-300 hover:text-white transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="flex flex-col">
+                <label className="text-xs font-semibold text-slate-600 mb-1" htmlFor="set-label-all">
+                  အားလုံး Filter (All Guests Label)
+                </label>
+                <input
+                  id="set-label-all"
+                  type="text"
+                  value={tempLabelAll}
+                  onChange={(e) => setTempLabelAll(e.target.value)}
+                  placeholder="အားလုံး"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-800 font-medium"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-xs font-semibold text-slate-600 mb-1" htmlFor="set-label-current">
+                  လက်ရှိနေထိုင်ဆဲ (Current Status Label)
+                </label>
+                <input
+                  id="set-label-current"
+                  type="text"
+                  value={tempLabelCurrent}
+                  onChange={(e) => setTempLabelCurrent(e.target.value)}
+                  placeholder="နေထိုင်ဆဲ"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-800 font-medium"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-xs font-semibold text-slate-600 mb-1" htmlFor="set-label-departed">
+                  ထွက်ခွာပြီး (Departed Status Label)
+                </label>
+                <input
+                  id="set-label-departed"
+                  type="text"
+                  value={tempLabelDeparted}
+                  onChange={(e) => setTempLabelDeparted(e.target.value)}
+                  placeholder="ထွက်ခွာပြီး"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-800 font-medium"
+                />
+              </div>
+              
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[10px] text-slate-500 leading-normal">
+                💡 ဤစာသားများကို ပြောင်းလဲပါက ဧည့်သည်ကတ်ပြားများ၊ အသေးစိတ်ဖော်ပြချက်များ၊ ရက်စွဲစစ်ထုတ်မှုနှင့် စာရင်းသွင်းပုံစံများရှိ အခြေအနေပြခလုတ်များ အားလုံးတွင် အလိုအလျောက် ပြောင်းလဲပေးမည်ဖြစ်ပါသည်။
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border-t border-slate-100 p-3 flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setTempLabelAll('အားလုံး');
+                  setTempLabelCurrent('နေထိုင်ဆဲ');
+                  setTempLabelDeparted('ထွက်ခွာပြီး');
+                }}
+                className="px-3 py-2 text-slate-500 hover:text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold mr-auto cursor-pointer"
+                title="မူလအတိုင်း ပြန်လည်သတ်မှတ်မည်"
+              >
+                Reset
+              </button>
+              <button
+                onClick={() => setShowEditLabelsModal(false)}
+                className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-bold cursor-pointer"
+              >
+                မလုပ်တော့ပါ
+              </button>
+              <button
+                onClick={() => {
+                  if (!tempLabelAll.trim() || !tempLabelCurrent.trim() || !tempLabelDeparted.trim()) {
+                    alert('ခလုတ်စာသားများကို အလွတ်မထားရပါ။');
+                    return;
+                  }
+                  saveLabels(tempLabelAll, tempLabelCurrent, tempLabelDeparted);
+                  setShowEditLabelsModal(false);
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                သိမ်းဆည်းမည်
               </button>
             </div>
           </div>
@@ -1492,6 +1659,7 @@ export default function App() {
                   setShowAdminLoginModal(false);
                   setLoginPasscode('');
                   setLoginError('');
+                  setShowLoginPasscode(false);
                 }}
                 className="text-slate-300 hover:text-white cursor-pointer"
               >
@@ -1508,6 +1676,7 @@ export default function App() {
                   setShowAdminLoginModal(false);
                   setLoginPasscode('');
                   setLoginError('');
+                  setShowLoginPasscode(false);
                   showToast('အက်ဒမင် စနစ်သို့ ဝင်ရောက်ခြင်း အောင်မြင်ပါသည်');
                 } else {
                   setLoginError('လျှို့ဝှက်နံပါတ် မှားယွင်းနေပါသည်။ ပြန်လည်ကြိုးစားပါ။');
@@ -1519,16 +1688,26 @@ export default function App() {
                 <label className="text-xs font-semibold text-slate-600 mb-1" htmlFor="login-passcode">
                   အက်ဒမင် လျှို့ဝှက်နံပါတ် (Passcode) ရိုက်ထည့်ပါ
                 </label>
-                <input
-                  id="login-passcode"
-                  type="password"
-                  required
-                  value={loginPasscode}
-                  onChange={(e) => setLoginPasscode(e.target.value)}
-                  placeholder="လျှို့ဝှက်နံပါတ် (Default: 123456)"
-                  className="w-full px-3 py-3 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-center tracking-widest text-slate-800"
-                  autoFocus
-                />
+                <div className="relative">
+                  <input
+                    id="login-passcode"
+                    type={showLoginPasscode ? "text" : "password"}
+                    required
+                    value={loginPasscode}
+                    onChange={(e) => setLoginPasscode(e.target.value)}
+                    placeholder="လျှို့ဝှက်နံပါတ် (Default: 123456)"
+                    className="w-full pl-3 pr-10 py-3 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-center tracking-widest text-slate-800"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPasscode(!showLoginPasscode)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg cursor-pointer flex items-center justify-center"
+                    title={showLoginPasscode ? "လျှို့ဝှက်နံပါတ် ဖျောက်မည်" : "လျှို့ဝှက်နံပါတ် ပြမည်"}
+                  >
+                    {showLoginPasscode ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 {loginError && (
                   <p className="text-xs font-medium text-rose-500 mt-1.5 text-center">{loginError}</p>
                 )}
@@ -1541,6 +1720,7 @@ export default function App() {
                     setShowAdminLoginModal(false);
                     setLoginPasscode('');
                     setLoginError('');
+                    setShowLoginPasscode(false);
                   }}
                   className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-800 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
                 >

@@ -29,9 +29,11 @@ interface GuestDetailProps {
   onEdit: () => void;
   onDelete: () => void;
   onStatusToggle: (id: string, isCurrent: boolean) => void;
+  labelCurrent?: string;
+  labelDeparted?: string;
 }
 
-export default function GuestDetail({ guest, onClose, onEdit, onDelete, onStatusToggle }: GuestDetailProps) {
+export default function GuestDetail({ guest, onClose, onEdit, onDelete, onStatusToggle, labelCurrent = 'နေထိုင်ဆဲ', labelDeparted = 'ထွက်ခွာပြီး' }: GuestDetailProps) {
   const [activePhoto, setActivePhoto] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   
@@ -280,7 +282,7 @@ export default function GuestDetail({ guest, onClose, onEdit, onDelete, onStatus
                 title="အခြေအနေပြောင်းရန် နှိပ်ပါ"
                 >
                   {guest.isCurrent ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-                  {guest.isCurrent ? 'လက်ရှိ နေထိုင်ဆဲ' : 'ပြန်လည်ထွက်ခွာပြီး'}
+                  {guest.isCurrent ? `လက်ရှိ ${labelCurrent}` : labelDeparted}
                   <span className="text-[9px] underline opacity-75 font-normal ml-0.5">(ပြောင်းရန် နှိပ်ပါ)</span>
                 </span>
               </div>
