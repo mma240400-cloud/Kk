@@ -151,6 +151,8 @@ export default function App() {
   const [filterStartDate, setFilterStartDate] = useState<string>('');
   const [filterEndDate, setFilterEndDate] = useState<string>('');
   const [showDateFilter, setShowDateFilter] = useState(false);
+  const filterStartDateRef = useRef<HTMLInputElement>(null);
+  const filterEndDateRef = useRef<HTMLInputElement>(null);
   
   // Custom configurations (e.g. Admin Info)
   const [adminPhone, setAdminPhone] = useState(() => {
@@ -382,6 +384,13 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  // Collapse date range filter when a search query is typed
+  useEffect(() => {
+    if (searchQuery.trim() !== '') {
+      setShowDateFilter(false);
+    }
+  }, [searchQuery]);
 
   // Share & QR Code states
   const [showShareModal, setShowShareModal] = useState(false);
@@ -663,6 +672,386 @@ export default function App() {
     const updated = guests.map(g => g.id === id ? { ...g, isCurrent } : g);
     saveGuestsToStorage(updated);
     showToast(isCurrent ? 'အခြေအနေကို နေထိုင်ဆဲ သို့ ပြောင်းလဲလိုက်ပါပြီ' : 'အခြေအနေကို ပြန်လည်ထွက်ခွာ သို့ ပြောင်းလဲလိုက်ပါပြီ');
+  };
+
+  // Bulk Change status for all selected guests simultaneously
+  const handleBulkStatusChange = (isCurrent: boolean) => {
+    if (selectedGuestIds.length === 0) return;
+    const updated = guests.map(g => selectedGuestIds.includes(g.id) ? { ...g, isCurrent } : g);
+    saveGuestsToStorage(updated);
+    setSelectedGuestIds([]);
+    showToast(`ရွေးချယ်ထားသော ဧည့်သည် ${selectedGuestIds.length} ဦး၏ အခြေအနေကို ပြောင်းလဲပြီးပါပြီ`);
+  };
+
+  // Generate a one-page summary statistics PDF showing the current dashboard analytics
+  const handleGenerateSummaryPDF = () => {
+    const todayStr = new Date().toLocaleDateString('my-MM', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    const nowTimeStr = new Date().toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const total = guests.length;
+    const current = guests.filter(g => g.isCurrent).length;
+    const departed = total - current;
+    const totalFamily = guests.reduce((sum, g) => sum + (g.familyMembers?.length || 0), 0);
+    const activeStayCount = filteredAndSortedGuests.length;
+
+    const reportHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>ဧည့်စာရင်း အကျဉ်းချုပ် အစီရင်ခံစာ - At a Glance Summary</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Padauk:wght@400;700&display=swap');
+          
+          body {
+            font-family: 'Padauk', 'Inter', sans-serif;
+            margin: 0;
+            padding: 40px;
+            color: #1e293b;
+            background: #ffffff;
+            line-height: 1.6;
+            font-size: 14px;
+          }
+          
+          .report-container {
+            max-width: 800px;
+            margin: 0 auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+          }
+          
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #10b981;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          
+          .title-area h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: #0f172a;
+            font-weight: 700;
+          }
+          
+          .title-area p {
+            margin: 0;
+            font-size: 13px;
+            color: #64748b;
+          }
+          
+          .meta-area {
+            text-align: right;
+            font-size: 13px;
+            color: #334155;
+          }
+          
+          .meta-row {
+            margin-bottom: 4px;
+          }
+          
+          .badge {
+            background: #f0fdf4;
+            color: #15803d;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 11px;
+            border: 1px solid #bbf7d0;
+          }
+          
+          .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 30px;
+          }
+          
+          .stat-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+          }
+          
+          .stat-card .label {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 6px;
+          }
+          
+          .stat-card .value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          
+          .chart-section {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
+          }
+          
+          .chart-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+          }
+          
+          .bar-container {
+            height: 24px;
+            background: #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            margin-bottom: 12px;
+          }
+          
+          .bar-current {
+            background: #10b981;
+            height: 100%;
+          }
+          
+          .bar-departed {
+            background: #94a3b8;
+            height: 100%;
+          }
+          
+          .legend {
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
+          }
+          
+          .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          }
+          
+          .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+          }
+          
+          .dot-current { background: #10b981; }
+          .dot-departed { background: #94a3b8; }
+          
+          .details-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+          }
+          
+          .details-table th {
+            background: #f1f5f9;
+            border-bottom: 2px solid #e2e8f0;
+            text-align: left;
+            padding: 10px 12px;
+            font-size: 12px;
+            color: #475569;
+            font-weight: 600;
+          }
+          
+          .details-table td {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 10px 12px;
+            font-size: 13px;
+            color: #334155;
+          }
+          
+          .footer {
+            margin-top: 50px;
+            border-top: 1px dashed #cbd5e1;
+            padding-top: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+          }
+          
+          .signature-box {
+            width: 220px;
+            text-align: center;
+          }
+          
+          .signature-line {
+            border-bottom: 1px solid #475569;
+            height: 40px;
+            margin-bottom: 8px;
+          }
+          
+          .signature-title {
+            font-size: 12px;
+            color: #475569;
+          }
+          
+          @media print {
+            body {
+              padding: 0;
+            }
+            .report-container {
+              border: none;
+              box-shadow: none;
+              padding: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="report-container">
+          <div class="header">
+            <div class="title-area">
+              <h1>ဧည့်စာရင်း အကျဉ်းချုပ် သုံးသပ်ချက် အစီရင်ခံစာ</h1>
+              <p>Myanmar Guest Registry - Administrative Summary</p>
+            </div>
+            <div class="meta-area">
+              <div class="meta-row"><strong>ထုတ်ယူသည့်နေ့စွဲ:</strong> ${todayStr}</div>
+              <div class="meta-row"><strong>အချိန်:</strong> ${nowTimeStr}</div>
+              <div class="meta-row"><strong>တာဝန်ခံ:</strong> <span class="badge">${adminRole}</span></div>
+            </div>
+          </div>
+          
+          <div class="grid">
+            <div class="stat-card">
+              <div class="label">စုစုပေါင်းဧည့်သည်</div>
+              <div class="value">${total} ဦး</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">${labelCurrent}</div>
+              <div class="value" style="color: #15803d;">${current} ဦး</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">${labelDeparted}</div>
+              <div class="value" style="color: #475569;">${departed} ဦး</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">အတူပါမိသားစုဝင်</div>
+              <div class="value">${totalFamily} ဦး</div>
+            </div>
+          </div>
+          
+          <div class="chart-section">
+            <div class="chart-title">
+              <span>တည်းခိုသူများ၏ အခြေအနေ အချိုးအစား (Staying Ratio)</span>
+              <span>နေထိုင်ဆဲ ${total > 0 ? Math.round((current / total) * 100) : 0}%</span>
+            </div>
+            <div class="bar-container">
+              <div class="bar-current" style="width: ${total > 0 ? (current / total) * 100 : 0}%"></div>
+              <div class="bar-departed" style="width: ${total > 0 ? (departed / total) * 100 : 0}%"></div>
+            </div>
+            <div class="legend">
+              <div class="legend-item">
+                <span class="dot dot-current"></span>
+                <span>${labelCurrent} (${current} ဦး)</span>
+              </div>
+              <div class="legend-item">
+                <span class="dot dot-departed"></span>
+                <span>${labelDeparted} (${departed} ဦး)</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="chart-title" style="font-size: 15px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+            လက်ရှိ စနစ်သုံးသပ်ချက် အချက်အလက်များ (Current Dashboard Context)
+          </div>
+          
+          <table class="details-table">
+            <thead>
+              <tr>
+                <th style="width: 40%">အကြောင်းအရာ</th>
+                <th style="width: 60%">အချက်အလက်</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>အက်ဒမင် ဖုန်းနံပါတ်</strong></td>
+                <td>${adminPhone}</td>
+              </tr>
+              <tr>
+                <td><strong>စစ်ထုတ်ထားသော ဧည့်သည်ဦးရေ</strong></td>
+                <td>${activeStayCount} ဦး ${statusFilter !== 'all' ? `(${statusFilter === 'current' ? labelCurrent : labelDeparted})` : ''}</td>
+              </tr>
+              <tr>
+                <td><strong>ရက်စွဲ စစ်ထုတ်မှု</strong></td>
+                <td>${(filterStartDate || filterEndDate) ? `${filterStartDate || 'စတင်မည့်ရက်မရှိ'} မှ ${filterEndDate || 'ပြီးဆုံးမည့်ရက်မရှိ'} ထိ` : 'စစ်ထုတ်ထားခြင်းမရှိပါ'}</td>
+              </tr>
+              <tr>
+                <td><strong>တည်းခိုခွင့်သက်တမ်းကျော်လွန်သူ ရှိ/မရှိ</strong></td>
+                <td style="color: ${hasOverdueCurrentGuests ? '#d97706' : '#15803d'}; font-weight: bold;">
+                  ${hasOverdueCurrentGuests ? '⚠️ သက်တမ်းကျော်လွန်နေသူများရှိသဖြင့် စစ်ဆေးရန်လိုအပ်ပါသည်' : '✅ သက်တမ်းလွန်သူမရှိပါ'}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <div class="footer">
+            <div class="signature-box">
+              <div class="signature-line"></div>
+              <div class="signature-title">စနစ်ကိုင်တွယ်သူ လက်မှတ်</div>
+              <div class="signature-title">(Operator Signature)</div>
+            </div>
+            <div class="signature-box">
+              <div class="signature-line" style="border: none; font-size: 13px; line-height: 40px; color: #475569;">
+                ${todayStr}
+              </div>
+              <div class="signature-title">အစီရင်ခံစာ ထုတ်ယူသည့်ရက်စွဲ</div>
+              <div class="signature-title">(Report Generation Date)</div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+      
+      const doc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (doc) {
+        doc.write(reportHTML);
+        doc.close();
+        setTimeout(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          document.body.removeChild(iframe);
+        }, 500);
+      }
+    } else {
+      printWindow.document.write(reportHTML);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 500);
+    }
   };
 
   // Delete guest record
@@ -1010,83 +1399,97 @@ export default function App() {
         ) : (
           <>
             {/* Statistics Cards (Only on Main Dashboard) */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className={`p-3.5 rounded-2xl border shadow-xs flex items-center justify-between gap-2 transition-all duration-300 relative overflow-hidden ${
-                isDateFilterActive 
-                  ? 'bg-emerald-50/40 border-emerald-200/80 ring-1 ring-emerald-400/20' 
-                  : 'bg-white border-slate-150'
-              }`}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${
-                    isDateFilterActive 
-                      ? 'bg-emerald-100 text-emerald-700' 
-                      : 'bg-slate-100 text-slate-700'
-                  }`}>
-                    <Users size={18} className={isDateFilterActive ? "animate-pulse" : ""} />
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between px-1.5 flex-wrap gap-2">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">စနစ်သုံးသပ်ချက် ချက်လက်မှတ်များ</span>
+                <button
+                  onClick={handleGenerateSummaryPDF}
+                  className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 rounded-xl font-bold text-xs transition-transform active:scale-95 flex items-center gap-1.5 border border-emerald-100 shadow-2xs cursor-pointer"
+                  title="အကျဉ်းချုပ် သုံးသပ်ချက် အစီရင်ခံစာ PDF ထုတ်ရန်"
+                  id="stats-summary-pdf-btn"
+                >
+                  <FileText size={13} className="text-emerald-600" />
+                  <span>At a Glance အစီရင်ခံစာ PDF</span>
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className={`p-3.5 rounded-2xl border shadow-xs flex items-center justify-between gap-2 transition-all duration-300 relative overflow-hidden ${
+                  isDateFilterActive 
+                    ? 'bg-emerald-50/40 border-emerald-200/80 ring-1 ring-emerald-400/20' 
+                    : 'bg-white border-slate-150'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${
+                      isDateFilterActive 
+                        ? 'bg-emerald-100 text-emerald-700' 
+                        : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      <Users size={18} className={isDateFilterActive ? "animate-pulse" : ""} />
+                    </div>
+                    <div>
+                      <div className={`text-[10px] font-bold uppercase tracking-wider transition-colors duration-300 ${
+                        isDateFilterActive ? 'text-emerald-700/90' : 'text-slate-400'
+                      }`}>
+                        {isDateFilterActive ? 'သတ်မှတ်ရက်အတွင်း ဧည့်သည်' : 'ဧည့်သည်စုစုပေါင်း'}
+                      </div>
+                      <div className={`text-lg font-bold transition-colors duration-300 ${
+                        isDateFilterActive ? 'text-emerald-800' : 'text-slate-800'
+                      }`}>
+                        {isDateFilterActive ? dateFilteredGuestsCount : stats.total} ဦး
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {isDateFilterActive && (
+                    <button
+                      onClick={() => {
+                        setFilterStartDate('');
+                        setFilterEndDate('');
+                        showToast('ရက်စွဲစစ်ထုတ်မှုအားလုံးကို ဖျက်လိုက်ပါပြီ');
+                      }}
+                      className="p-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-all cursor-pointer"
+                      title="ရက်စွဲ စစ်ထုတ်မှုကို ပြန်ဖျက်ရန်"
+                    >
+                      <span className="text-[10px] font-extrabold px-1.5">× ဖျက်မည်</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle2 size={18} />
                   </div>
                   <div>
-                    <div className={`text-[10px] font-bold uppercase tracking-wider transition-colors duration-300 ${
-                      isDateFilterActive ? 'text-emerald-700/90' : 'text-slate-400'
-                    }`}>
-                      {isDateFilterActive ? 'သတ်မှတ်ရက်အတွင်း ဧည့်သည်' : 'ဧည့်သည်စုစုပေါင်း'}
-                    </div>
-                    <div className={`text-lg font-bold transition-colors duration-300 ${
-                      isDateFilterActive ? 'text-emerald-800' : 'text-slate-800'
-                    }`}>
-                      {isDateFilterActive ? dateFilteredGuestsCount : stats.total} ဦး
+                    <div className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-wider">{labelCurrent}</div>
+                    <div className="text-lg font-bold text-emerald-800 flex items-center gap-1.5 flex-wrap">
+                      <span>{stats.current} ဦး</span>
+                      {hasOverdueCurrentGuests && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-200 rounded-md animate-pulse cursor-help animate-duration-1000" title="သတ်မှတ်ထားသော တည်းခိုခွင့်သက်တမ်း ကျော်လွန်နေသည့် ဧည့်သည်များ ရှိနေပါသဖြင့် စစ်ဆေးပေးပါရန်">
+                          ⚠️ စစ်ရန်ရှိ
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
-                
-                {isDateFilterActive && (
-                  <button
-                    onClick={() => {
-                      setFilterStartDate('');
-                      setFilterEndDate('');
-                      showToast('ရက်စွဲစစ်ထုတ်မှုအားလုံးကို ဖျက်လိုက်ပါပြီ');
-                    }}
-                    className="p-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-all cursor-pointer"
-                    title="ရက်စွဲ စစ်ထုတ်မှုကို ပြန်ဖျက်ရန်"
-                  >
-                    <span className="text-[10px] font-extrabold px-1.5">× ဖျက်မည်</span>
-                  </button>
-                )}
-              </div>
 
-              <div className="bg-white p-3.5 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
-                  <CheckCircle2 size={18} />
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-wider">{labelCurrent}</div>
-                  <div className="text-lg font-bold text-emerald-800 flex items-center gap-1.5 flex-wrap">
-                    <span>{stats.current} ဦး</span>
-                    {hasOverdueCurrentGuests && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-200 rounded-md animate-pulse cursor-help animate-duration-1000" title="သတ်မှတ်ထားသော တည်းခိုခွင့်သက်တမ်း ကျော်လွန်နေသည့် ဧည့်သည်များ ရှိနေပါသဖြင့် စစ်ဆေးပေးပါရန်">
-                        ⚠️ စစ်ရန်ရှိ
-                      </span>
-                    )}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center flex-shrink-0">
+                    <AlertCircle size={18} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{labelDeparted}</div>
+                    <div className="text-lg font-bold text-slate-600">{stats.departed} ဦး</div>
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-white p-3.5 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center flex-shrink-0">
-                  <AlertCircle size={18} />
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{labelDeparted}</div>
-                  <div className="text-lg font-bold text-slate-600">{stats.departed} ဦး</div>
-                </div>
-              </div>
-
-              <div className="bg-white p-3.5 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
-                  <Users size={18} />
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-wider">မိသားစုဝင်စုစုပေါင်း</div>
-                  <div className="text-lg font-bold text-emerald-900">{stats.totalFamily} ဦး</div>
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                    <Users size={18} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-wider">မိသားစုဝင်စုစုပေါင်း</div>
+                    <div className="text-lg font-bold text-emerald-900">{stats.totalFamily} ဦး</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1101,15 +1504,17 @@ export default function App() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="အမည် / မှတ်ပုံတင် / လာရာဒေသ ရှာရန်"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-[#F8F9FA] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm text-slate-800 font-medium"
+                  className="w-full pl-10 pr-10 py-3 rounded-xl bg-[#F8F9FA] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm text-slate-800 font-medium"
                   id="search-input"
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 font-bold bg-slate-200/60 w-5 h-5 rounded-full flex items-center justify-center"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold bg-slate-200/60 hover:bg-slate-200 transition-all w-5 h-5 rounded-full flex items-center justify-center cursor-pointer"
+                    title="ရှာဖွေမှု အားလုံးဖျက်ရန်"
+                    id="clear-search-btn"
                   >
-                    ×
+                    <X size={12} />
                   </button>
                 )}
               </div>
@@ -1256,23 +1661,57 @@ export default function App() {
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                           စတင်မည့်ရက် (Stay From)
                         </label>
-                        <input
-                          type="date"
-                          value={filterStartDate}
-                          onChange={(e) => setFilterStartDate(e.target.value)}
-                          className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-800"
-                        />
+                        <div className="relative flex items-center">
+                          <input
+                            ref={filterStartDateRef}
+                            type="date"
+                            value={filterStartDate}
+                            onChange={(e) => setFilterStartDate(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-800 bg-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              try {
+                                filterStartDateRef.current?.showPicker();
+                              } catch (e) {
+                                filterStartDateRef.current?.focus();
+                              }
+                            }}
+                            className="absolute left-3 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer flex items-center justify-center border-0 bg-transparent p-0"
+                            title="ရက်စွဲရွေးချယ်ရန်"
+                          >
+                            <Calendar size={13} />
+                          </button>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                           ပြီးဆုံးမည့်ရက် (Stay To)
                         </label>
-                        <input
-                          type="date"
-                          value={filterEndDate}
-                          onChange={(e) => setFilterEndDate(e.target.value)}
-                          className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-800"
-                        />
+                        <div className="relative flex items-center">
+                          <input
+                            ref={filterEndDateRef}
+                            type="date"
+                            value={filterEndDate}
+                            onChange={(e) => setFilterEndDate(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-800 bg-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              try {
+                                filterEndDateRef.current?.showPicker();
+                              } catch (e) {
+                                filterEndDateRef.current?.focus();
+                              }
+                            }}
+                            className="absolute left-3 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer flex items-center justify-center border-0 bg-transparent p-0"
+                            title="ရက်စွဲရွေးချယ်ရန်"
+                          >
+                            <Calendar size={13} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1341,10 +1780,24 @@ export default function App() {
                 </div>
 
                 {selectedGuestIds.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-500 bg-slate-200/60 px-2.5 py-1 rounded-lg">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-slate-500 bg-slate-200/60 px-2.5 py-1.5 rounded-lg">
                       {selectedGuestIds.length} ဦး ရွေးချယ်ပြီး
                     </span>
+                    <select
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') return;
+                        handleBulkStatusChange(val === 'current');
+                        e.target.value = ''; // Reset selection
+                      }}
+                      className="text-xs bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 py-1.5 px-2.5 rounded-xl font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs cursor-pointer"
+                      id="bulk-status-dropdown"
+                    >
+                      <option value="">အခြေအနေ ပြောင်းရန်...</option>
+                      <option value="current">{labelCurrent} သို့ ပြောင်းမည်</option>
+                      <option value="departed">{labelDeparted} သို့ ပြောင်းမည်</option>
+                    </select>
                     <button
                       onClick={handleBulkDelete}
                       className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 hover:shadow-md active:scale-95 transition-all cursor-pointer"
